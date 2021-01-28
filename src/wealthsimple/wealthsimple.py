@@ -2,6 +2,8 @@ from .requestor import APIRequestor
 from requests import Session
 import os
 import json
+import requests
+import pandas as pd
 
 
 class WSTrade:
@@ -32,7 +34,7 @@ class WSTrade:
     get_activities()
         Get Wealthsimple Trade activities
     get_orders(symbol=None)
-        Get Wealthsimple Trade orders 
+        Get Wealthsimple Trade orders
     get_security(symbol)
         Get information about a security
     get_positions(id)
@@ -202,6 +204,45 @@ class WSTrade:
         response = self.TradeAPI.makeRequest("GET", "account/activities")
         response = response.json()
         return response["results"]
+
+    def get_orders_all(self, account_id=None) -> list:
+        """Get Wealthsimple Trade orders
+
+        Parameters
+        ----------
+        account_id : str
+            Account id to pull orders from
+        Returns
+        -------
+        list
+            A list containing all Wealthsimple Trade order dictionaries
+        """
+        # response = self.TradeAPI.makeRequest("GET", "orders")
+        auth = self.session.headers["Authorization"]
+        response = requests.get(
+            f"https://trade-service.wealthsimple.com/orders?offset=0&account_id={account_id}",
+            headers={"Authorization": auth},
+        )
+        response = response.json()
+        total_pages = response["total"]
+
+        page_number = 1
+        offset = page_number * 20
+
+        df = pd.json_normalize(response["results"])
+
+        while page_number * 20 < total_pages:
+            offset = page_number * 20
+            url = f"https://trade-service.wealthsimple.com/orders?offset={offset}&account_id={account_id}"
+            resp = requests.get(url=url, headers={"Authorization": auth})
+            resp = resp.json()
+            df = df.append(pd.json_normalize(resp["results"]))
+            page_number += 1
+        # df.drop_duplicates(subset="order_id", inplace=True)
+        df.set_index("order_id", inplace=True)
+
+        df.to_csv("testing.csv")
+        return response
 
     def get_orders(self, symbol: str = None) -> list:
         """Get Wealthsimple Trade orders
